@@ -14,7 +14,7 @@ done
 iconutil -c icns "$ICONSET" -o "$ROOT/.build-cache/AppIcon.icns"
 swiftc -parse-as-library -swift-version 5 -O -target arm64-apple-macosx14.0 \
   -module-cache-path "$ROOT/.build-cache" \
-  "$ROOT/Sources/Compression.swift" "$ROOT/Sources/App.swift" \
+  "$ROOT/Sources/Compression.swift" "$ROOT/Sources/ImageCompression.swift" "$ROOT/Sources/App.swift" \
   -o "$APP/Contents/MacOS/PDFPress"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -25,13 +25,14 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>PDF Press</string>
 <key>CFBundleDisplayName</key><string>PDF Press</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleVersion</key><string>1</string>
-<key>CFBundleShortVersionString</key><string>1.0</string>
+<key>CFBundleVersion</key><string>2</string>
+<key>CFBundleShortVersionString</key><string>1.1</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
 cp "$ROOT/.build-cache/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+cp "$ROOT/Assets/Icon-preview.png" "$APP/Contents/Resources/BrandIcon.png"
 codesign --force --sign - "$APP"
 echo "Built: $APP"

@@ -1,11 +1,13 @@
 import Foundation
 import PDFKit
+import UniformTypeIdentifiers
 
 enum Quality: String, CaseIterable, Identifiable {
     case high, balanced, small
     var id: String { rawValue }
     var title: String { switch self { case .high: "High quality"; case .balanced: "Balanced"; case .small: "Smallest file" } }
-    var detail: String { switch self { case .high: "300 dpi · for printing"; case .balanced: "150 dpi · everyday sharing"; case .small: "72 dpi · screen reading" } }
+    var detail: String { switch self { case .high: "PDF: 300 dpi · images: 90%"; case .balanced: "PDF: 150 dpi · images: 75%"; case .small: "PDF: 72 dpi · images: 50%" } }
+    var imageQuality: Double { switch self { case .high: 0.9; case .balanced: 0.75; case .small: 0.5 } }
     var preset: String { switch self { case .high: "/printer"; case .balanced: "/ebook"; case .small: "/screen" } }
 }
 
@@ -42,6 +44,12 @@ struct CompressionResult {
 }
 
 enum Compressor {
+    static func kind(_ url: URL) throws -> FileKind {
+        if url.pathExtension.lowercased() == "pdf" { _ = try document(url); return .pdf }
+        try ImageCompressor.validate(url)
+        return .image
+    }
+    static var allowedTypes: [UTType] { [.pdf] + ImageCompressor.allowedTypes }
     static func executable() -> URL? {
         let paths = ["/opt/homebrew/bin/gs", "/usr/local/bin/gs"] +
             (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map { "\($0)/gs" }
@@ -60,7 +68,10 @@ enum Compressor {
         }
         return doc
     }
-    static func compress(input: URL, directory: URL, quality: Quality, cancellation: Cancellation) throws -> CompressionResult {
+    static func compress(input: URL, directory: URL, quality: Quality, cancellation: Cancellation, imageOptions: ImageOptions = ImageOptions()) throws -> CompressionResult {
+        if input.pathExtension.lowercased() != "pdf" {
+            return try ImageCompressor.compress(input: input, directory: directory, quality: quality, options: imageOptions, cancellation: cancellation)
+        }
         try cancellation.check()
         let original = try document(input)
         for index in 0..<original.pageCount {
@@ -74,7 +85,6 @@ enum Compressor {
         guard fm.fileExists(atPath: directory.path, isDirectory: &isDirectory), isDirectory.boolValue else {
             throw CompressionError.message("Choose an existing output folder.")
         }
-        let inputBytes = try bytes(input)
         let scratch = fm.temporaryDirectory.appendingPathComponent("PDFPress-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: scratch) }
@@ -109,20 +119,27 @@ enum Compressor {
                 throw CompressionError.message("Page sizes changed during compression. Your original is unchanged.")
             }
         }
+        return try save(candidate: candidate, input: input, directory: directory, cancellation: cancellation)
+    }
+    static func save(candidate: URL, input: URL, directory: URL, cancellation: Cancellation) throws -> CompressionResult {
+        let fm = FileManager.default
+        let inputBytes = try bytes(input)
         let outputBytes = try bytes(candidate)
         guard outputBytes < inputBytes else { return CompressionResult(inputBytes: inputBytes, outputBytes: inputBytes, output: nil) }
         try cancellation.check()
         // copyItem refuses to overwrite an existing file, including collisions with another process.
         let stem = input.deletingPathExtension().lastPathComponent + "-compressed"
         for suffix in 0..<10000 {
-            let name = suffix == 0 ? "\(stem).pdf" : "\(stem)-\(suffix + 1).pdf"
+            try cancellation.check()
+            let ext = candidate.pathExtension
+            let name = suffix == 0 ? "\(stem).\(ext)" : "\(stem)-\(suffix + 1).\(ext)"
             let destination = directory.appendingPathComponent(name)
             do {
                 try fm.copyItem(at: candidate, to: destination)
                 return CompressionResult(inputBytes: inputBytes, outputBytes: outputBytes, output: destination)
             } catch {
                 if (error as NSError).code == NSFileWriteFileExistsError { continue }
-                throw CompressionError.message("Could not save the PDF. Choose a folder you can write to.")
+                throw CompressionError.message("Could not save the file. Choose a folder you can write to.")
             }
         }
         throw CompressionError.message("Too many files with this name. Choose another output folder.")

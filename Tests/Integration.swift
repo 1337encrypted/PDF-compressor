@@ -1,6 +1,7 @@
 import Foundation
 import PDFKit
 import CryptoKit
+import Darwin
 
 func require(_ condition: @autoclosure () throws -> Bool, _ message: String) throws {
     if try !condition() { throw CompressionError.message("CHECK FAILED: \(message)") }
@@ -17,6 +18,7 @@ func expectFailure(_ label: String, _ operation: () throws -> Void) throws {
 
 @main struct Integration {
     static func main() throws {
+        setbuf(stdout, nil)
         let root = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
         let source = root.appendingPathComponent("sample with spaces.pdf")
         let originalHash = try digest(source)
@@ -50,6 +52,7 @@ func expectFailure(_ label: String, _ operation: () throws -> Void) throws {
         cancelled.cancel()
         try expectFailure("Cancellation") { _ = try Compressor.compress(input: source, directory: root, quality: .balanced, cancellation: cancelled) }
         try expectFailure("Missing output folder") { _ = try Compressor.compress(input: source, directory: root.appendingPathComponent("missing"), quality: .balanced, cancellation: Cancellation()) }
+        try checkImages(root)
         print("All integration checks passed.")
     }
 }
