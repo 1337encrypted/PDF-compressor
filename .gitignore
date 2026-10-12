@@ -1,0 +1,16 @@
+# Generated app and build artifacts
+*.app/
+.build-cache/
+.DS_Store
+
+# Test artifacts and local Python environments
+fixtures/
+__pycache__/
+*.pyc
+.venv/
+
+# Local credentials
+.env
+.env.*
+*.pem
+*.key
